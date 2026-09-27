@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "UserStats": {
+      "title": "User Stats",
+      "description": "User's progress, points, and streaks",
+      "type": "object",
+      "properties": {
+        "points": { "type": "number" },
+        "streak": { "type": "number" },
+        "completedDays": { "type": "array", "items": { "type": "string" } },
+        "rank": { "type": "string" },
+        "unlockedBadges": { "type": "array", "items": { "type": "string" } },
+        "currentPlanId": { "type": "string" },
+        "xpToNextLevel": { "type": "number" }
+      },
+      "required": ["points", "streak", "completedDays", "rank", "unlockedBadges", "xpToNextLevel"]
+    },
+    "ReadingProgress": {
+      "title": "Reading Progress",
+      "description": "Tracks read chapters",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "book": { "type": "string" },
+        "chapter": { "type": "number" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "book", "chapter", "completedAt"]
+    },
+    "SavedNote": {
+      "title": "Saved Note",
+      "description": "User's notes and highlights",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "reference": { "type": "string" },
+        "text": { "type": "string" },
+        "content": { "type": "string" },
+        "color": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "reference", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserStats",
+      "description": "User profile and statistics"
+    },
+    "progress/{userId}/completed/{progressId}": {
+      "schema": "ReadingProgress",
+      "description": "List of chapters completed by the user"
+    },
+    "notes/{userId}/userNotes/{noteId}": {
+      "schema": "SavedNote",
+      "description": "User's personal study notes"
+    }
+  }
+}

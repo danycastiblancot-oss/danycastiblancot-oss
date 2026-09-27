@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ---------------------------------------------------------
+    // 1. GLOBAL HELPERS
+    // ---------------------------------------------------------
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isEmailVerified() {
+      // Mandating verified email for writes as per hardening guidelines
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ---------------------------------------------------------
+    // 2. VALIDATION BLUEPRINTS
+    // ---------------------------------------------------------
+
+    function isValidUserStats(data) {
+      return data.keys().hasAll(['points', 'streak', 'completedDays', 'rank', 'unlockedBadges', 'xpToNextLevel']) &&
+             data.keys().size() >= 6 &&
+             data.points is number && data.points >= 0 &&
+             data.streak is number && data.streak >= 0 &&
+             data.completedDays is list && data.completedDays.size() <= 1000 &&
+             data.rank is string && data.rank.size() <= 50 &&
+             data.unlockedBadges is list && data.unlockedBadges.size() <= 100 &&
+             data.xpToNextLevel is number && data.xpToNextLevel >= 0;
+    }
+
+    function isValidReadingProgress(data) {
+      return data.keys().hasAll(['userId', 'book', 'chapter', 'completedAt']) &&
+             data.keys().size() == 4 &&
+             data.userId == request.auth.uid &&
+             data.book is string && data.book.size() <= 50 &&
+             data.chapter is number && data.chapter > 0 &&
+             data.completedAt == request.time;
+    }
+
+    function isValidSavedNote(data) {
+      return data.keys().hasAll(['userId', 'reference', 'content', 'createdAt']) &&
+             data.userId == request.auth.uid &&
+             data.reference is string && data.reference.size() <= 100 &&
+             data.content is string && data.content.size() <= 10000 &&
+             data.createdAt == request.time &&
+             // Optional fields if present must be correct
+             (!data.keys().contains('text') || data.text is string) &&
+             (!data.keys().contains('color') || data.color is string);
+    }
+
+    // ---------------------------------------------------------
+    // 3. MASTER GATE & DEFAULT DENY
+    // ---------------------------------------------------------
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // 4. COLLECTION RULES
+    // ---------------------------------------------------------
+
+    // User Stats
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isEmailVerified() && isValidUserStats(incoming());
+      allow update: if isOwner(userId) && isEmailVerified() && isValidUserStats(incoming()) && (
+        // Enforce immutability of record if needed, or allow partial updates via action-based patterns
+        // Here we allow any field in UserStats to be updated by owner as long as it stays valid
+        true
+      );
+    }
+
+    // Reading Progress
+    match /progress/{userId}/completed/{progressId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(progressId);
+      allow create: if isOwner(userId) && isEmailVerified() && isValidId(progressId) && isValidReadingProgress(incoming());
+      allow update, delete: if false; // Immutable
+    }
+
+    // User Notes
+    match /notes/{userId}/userNotes/{noteId} {
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(noteId);
+      allow create: if isOwner(userId) && isEmailVerified() && isValidId(noteId) && isValidSavedNote(incoming());
+      allow update: if isOwner(userId) && isEmailVerified() && isValidId(noteId) && isValidSavedNote(incoming()) && (
+        // Action: General Update
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt
+      );
+      allow delete: if isOwner(userId) && isEmailVerified();
+    }
+  }
+}
