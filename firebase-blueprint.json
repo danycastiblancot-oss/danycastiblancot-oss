@@ -34,10 +34,14 @@
       "properties": {
         "userId": { "type": "string" },
         "reference": { "type": "string" },
+        "title": { "type": "string" },
         "text": { "type": "string" },
         "content": { "type": "string" },
         "color": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "category": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "reference", "content", "createdAt"]
     }

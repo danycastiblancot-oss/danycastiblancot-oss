@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { LogIn, LogOut, User as UserIcon, Loader2 } from 'lucide-react';
-import { auth } from '../lib/firebase';
-import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { LogIn, User as UserIcon, Loader2, LogOut } from 'lucide-react';
+import { auth, logoutUser } from '../lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
-export const AuthButton: React.FC = () => {
+interface AuthButtonProps {
+  onOpenAccountModal?: () => void;
+}
+
+export const AuthButton: React.FC<AuthButtonProps> = ({ onOpenAccountModal }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,58 +20,55 @@ export const AuthButton: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
-    setLoading(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    setLoading(true);
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) return <Loader2 className="animate-spin text-bible-gold" size={20} />;
+  if (loading) return <Loader2 className="animate-spin text-amber-600" size={18} />;
 
   if (user) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="hidden md:block text-right">
-          <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">{user.displayName}</p>
-          <button onClick={handleLogout} className="text-[8px] font-extra-bold text-bible-accent uppercase tracking-tighter hover:underline">Cerrar Sesión</button>
-        </div>
-        <div className="w-10 h-10 rounded-full border-2 border-bible-gold/30 p-0.5 overflow-hidden shadow-sm">
-          {user.photoURL ? (
-            <img src={user.photoURL} alt={user.displayName || ''} className="w-full h-full rounded-full object-cover" />
-          ) : (
-            <UserIcon className="w-full h-full text-stone-400 p-1" />
-          )}
-        </div>
+      <div className="flex items-center gap-1.5">
+        <button 
+          onClick={onOpenAccountModal}
+          className="flex items-center gap-2 p-1 pl-2.5 sm:pl-3 bg-white hover:bg-stone-50 border border-stone-200 rounded-full shadow-sm transition-all group"
+          title="Ver Perfil y Avance"
+        >
+          <div className="hidden sm:block text-right leading-none">
+            <p className="text-[11px] font-bold text-stone-800 truncate max-w-[120px]">
+              {user.displayName || (user.isAnonymous ? 'Invitado' : 'Mi Perfil')}
+            </p>
+            <span className="text-[9px] font-semibold text-amber-700 uppercase tracking-wider flex items-center justify-end gap-1 mt-0.5">
+              Ver Perfil
+            </span>
+          </div>
+          <div className="w-8 h-8 rounded-full border border-amber-500/40 p-0.5 overflow-hidden shadow-sm bg-amber-50 flex items-center justify-center group-hover:scale-105 transition-transform">
+            {user.photoURL ? (
+              <img src={user.photoURL} alt={user.displayName || ''} className="w-full h-full rounded-full object-cover" />
+            ) : (
+              <UserIcon className="w-4 h-4 text-amber-800" />
+            )}
+          </div>
+        </button>
+
+        <button
+          onClick={async () => {
+            await logoutUser();
+          }}
+          className="p-2 rounded-full text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+          title="Cerrar Sesión"
+        >
+          <LogOut size={16} />
+        </button>
       </div>
     );
   }
 
   return (
     <motion.button
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-      onClick={handleLogin}
-      className="flex items-center gap-2 px-5 py-2.5 bg-bible-leather text-white rounded-full text-xs font-bold shadow-md hover:bg-bible-ink transition-all"
+      whileHover={{ scale: 1.03 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={onOpenAccountModal}
+      className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-stone-900 to-stone-850 text-white rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all"
     >
-      <LogIn size={14} />
-      <span>Acceder</span>
+      <LogIn size={13} className="text-amber-400" />
+      <span>Iniciar Sesión / Registro</span>
     </motion.button>
   );
 };

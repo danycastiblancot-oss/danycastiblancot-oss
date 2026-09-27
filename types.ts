@@ -112,10 +112,24 @@ export interface SavedNote {
   id?: string;
   userId: string;
   reference: string;
+  title?: string;
   text?: string;
   content: string;
+  category?: 'devocional' | 'estudio' | 'teologia' | 'oracion' | 'general';
   color?: string;
-  createdAt: any; // Firestore Timestamp
+  tags?: string[];
+  createdAt: any; // Firestore Timestamp or ISO string
+  updatedAt?: any;
+}
+
+export interface GitHubIntegrationState {
+  connected: boolean;
+  username?: string;
+  avatarUrl?: string;
+  token?: string;
+  repo?: string;
+  lastSync?: string;
+  gistUrl?: string;
 }
 
 // Interface for Quiz Questions used in StudyLesson
@@ -150,4 +164,65 @@ export interface CharacterBiography {
   significance: string;
   detailed_bio: string;
   related_verses: string[];
+}
+
+// Interfaces for Deep Exegesis and AI Theology
+export interface OriginalLanguageWord {
+  originalWord: string; // Hebrew or Greek script
+  transliteration: string;
+  strongsNumber: string;
+  meaning: string;
+  theologicalContext: string;
+}
+
+export interface ExegeticalDeepDive {
+  passage: string;
+  historicalContext: string;
+  originalLanguageInsights: OriginalLanguageWord[];
+  christocentricConnection: string;
+  theologicalDoctrines: string[];
+  practicalApplication: string[];
+}
+
+export interface HomileticalOutlinePoint {
+  romanNumeral: string;
+  title: string;
+  biblicalSupport: string;
+  explanation: string;
+  illustration: string;
+}
+
+export interface HomileticalOutline {
+  theme: string;
+  mainText: string;
+  title: string;
+  centralProposition: string;
+  introduction: string;
+  points: HomileticalOutlinePoint[];
+  conclusion: string;
+  closingPrayer: string;
+}
+
+export interface DiagramNode {
+  id: string;
+  label: string;
+  description: string;
+  scriptureReference: string;
+  category: string;
+  color?: string;
+}
+
+export interface DiagramConnection {
+  fromId: string;
+  toId: string;
+  relationshipLabel: string;
+}
+
+export interface TheologicalDiagram {
+  title: string;
+  description: string;
+  centralTheme: string;
+  nodes: DiagramNode[];
+  connections: DiagramConnection[];
+  summaryConclusion: string;
 }

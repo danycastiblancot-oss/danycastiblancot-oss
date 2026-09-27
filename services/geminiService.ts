@@ -6,7 +6,10 @@ import {
   DailyDevotional, 
   MoodResult, 
   StudyLesson, 
-  CharacterBiography 
+  CharacterBiography,
+  ExegeticalDeepDive,
+  TheologicalDiagram,
+  HomileticalOutline
 } from "../types";
 
 /**
@@ -17,7 +20,7 @@ export class GeminiBibleService {
   private chapterCache: Map<string, ChapterResponse>;
   private readonly modelName: string;
 
-  constructor(modelName: string = 'gemini-3-flash-preview') {
+  constructor(modelName: string = 'gemini-3.8-flash') {
     this.chapterCache = new Map<string, ChapterResponse>();
     this.modelName = modelName;
   }
@@ -361,6 +364,175 @@ export class GeminiBibleService {
 
     return JSON.parse(response.text) as CharacterBiography;
   }
+  /**
+   * Realiza un estudio exegético profundo con análisis lingüístico en griego/hebreo,
+   * conexión cristocéntrica y teología bíblica.
+   */
+  public async getExegeticalDeepDive(passageOrTopic: string): Promise<ExegeticalDeepDive> {
+    const ai = this.getAIInstance();
+    const systemInstruction = `
+      Eres un catedrático erudito de Lenguas Bíblicas y Teología Sistemática de la Academia ABBA.
+      Analiza el pasaje o tema con máxima rigurosidad académica:
+      1. Palabras clave en sus lenguas originales (Hebreo en el AT, Griego en el NT) con grafía original, transliteración fonética, número de concordancia Strong, significado léxico y su peso teológico.
+      2. Contexto histórico, social y literario preciso.
+      3. Conexión Cristocéntrica: cómo este pasaje o tema tipifica, profetiza o encuentra su cumplimiento glorioso en Jesucristo.
+      4. Doctrinas teológicas clave involucradas (Sana Doctrina).
+      5. Aplicaciones prácticas para la vida cristiana hoy.
+    `;
+
+    const prompt = `Realiza la exégesis lingüística y teológica de: "${passageOrTopic}".`;
+
+    const response = await ai.models.generateContent({
+      model: this.modelName,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            passage: { type: Type.STRING },
+            historicalContext: { type: Type.STRING },
+            originalLanguageInsights: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  originalWord: { type: Type.STRING },
+                  transliteration: { type: Type.STRING },
+                  strongsNumber: { type: Type.STRING },
+                  meaning: { type: Type.STRING },
+                  theologicalContext: { type: Type.STRING }
+                },
+                required: ["originalWord", "transliteration", "strongsNumber", "meaning", "theologicalContext"]
+              }
+            },
+            christocentricConnection: { type: Type.STRING },
+            theologicalDoctrines: { type: Type.ARRAY, items: { type: Type.STRING } },
+            practicalApplication: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["passage", "historicalContext", "originalLanguageInsights", "christocentricConnection", "theologicalDoctrines", "practicalApplication"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text) as ExegeticalDeepDive;
+  }
+
+  /**
+   * Genera la estructura de un diagrama conceptual teológico con nodos y conexiones.
+   */
+  public async generateTheologicalDiagram(concept: string): Promise<TheologicalDiagram> {
+    const ai = this.getAIInstance();
+    const systemInstruction = `
+      Eres un arquitecto de infografías y diagramas conceptuales de Teología Bíblica de la Academia ABBA.
+      Diseña un diagrama visual estructurado con nodos y conexiones lógicas para el tema dado.
+      Cada nodo debe tener un label claro, una descripción concisa, su referencia bíblica y categoría.
+      Las conexiones deben reflejar relaciones doctrinales (ej: "cumple", "revela", "engendra", "sella", "prefigura").
+    `;
+
+    const prompt = `Diseña el diagrama conceptual teológico para: "${concept}".`;
+
+    const response = await ai.models.generateContent({
+      model: this.modelName,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            centralTheme: { type: Type.STRING },
+            nodes: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  label: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  scriptureReference: { type: Type.STRING },
+                  category: { type: Type.STRING },
+                  color: { type: Type.STRING }
+                },
+                required: ["id", "label", "description", "scriptureReference", "category"]
+              }
+            },
+            connections: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  fromId: { type: Type.STRING },
+                  toId: { type: Type.STRING },
+                  relationshipLabel: { type: Type.STRING }
+                },
+                required: ["fromId", "toId", "relationshipLabel"]
+              }
+            },
+            summaryConclusion: { type: Type.STRING }
+          },
+          required: ["title", "description", "centralTheme", "nodes", "connections", "summaryConclusion"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text) as TheologicalDiagram;
+  }
+
+  /**
+   * Genera un bosquejo homilético expositivo para predicar o enseñar bíblicamente.
+   */
+  public async generateSermonOutline(passage: string, theme?: string): Promise<HomileticalOutline> {
+    const ai = this.getAIInstance();
+    const systemInstruction = `
+      Eres un maestro de Homilética Expositiva y Predicación Bíblica de la Academia ABBA.
+      Crea un bosquejo fiel a la hermenéutica sana con proposición central clara, introducción cautivadora,
+      puntos numerados con su apoyo bíblico e ilustración, y una conclusión desafiante con oración.
+    `;
+
+    const prompt = `Crea un bosquejo homilético expositivo para el texto: "${passage}" ${theme ? `con énfasis en: "${theme}"` : ''}.`;
+
+    const response = await ai.models.generateContent({
+      model: this.modelName,
+      contents: prompt,
+      config: {
+        systemInstruction,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            theme: { type: Type.STRING },
+            mainText: { type: Type.STRING },
+            title: { type: Type.STRING },
+            centralProposition: { type: Type.STRING },
+            introduction: { type: Type.STRING },
+            points: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  romanNumeral: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  biblicalSupport: { type: Type.STRING },
+                  explanation: { type: Type.STRING },
+                  illustration: { type: Type.STRING }
+                },
+                required: ["romanNumeral", "title", "biblicalSupport", "explanation", "illustration"]
+              }
+            },
+            conclusion: { type: Type.STRING },
+            closingPrayer: { type: Type.STRING }
+          },
+          required: ["theme", "mainText", "title", "centralProposition", "introduction", "points", "conclusion", "closingPrayer"]
+        }
+      }
+    });
+
+    return JSON.parse(response.text) as HomileticalOutline;
+  }
 }
 
 // Instancia singleton por defecto
@@ -375,3 +547,6 @@ export const getVersesByMood = (mood: string) => geminiService.getVersesByMood(m
 export const getStudyLesson = (topic: string) => geminiService.getStudyLesson(topic);
 export const askTheologyTutor = (question: string, contextTopic: string) => geminiService.askTheologyTutor(question, contextTopic);
 export const getCharacterBiography = (character: string) => geminiService.getCharacterBiography(character);
+export const getExegeticalDeepDive = (passageOrTopic: string) => geminiService.getExegeticalDeepDive(passageOrTopic);
+export const generateTheologicalDiagram = (concept: string) => geminiService.generateTheologicalDiagram(concept);
+export const generateSermonOutline = (passage: string, theme?: string) => geminiService.generateSermonOutline(passage, theme);

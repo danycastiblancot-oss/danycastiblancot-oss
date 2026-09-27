@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.31.0",
+    "d3": "^7.9.0",
     "firebase": "^12.13.0",
     "lucide-react": "^1.16.0",
     "motion": "^12.38.0",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
+    "@types/d3": "^7.4.3",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
     "eslint": "^10.4.0",

@@ -16,8 +16,15 @@ import {
   ChevronRight,
   Menu,
   X,
-  User
+  User,
+  BarChart3,
+  Database,
+  CheckCircle2,
+  FileText,
+  Loader2
 } from 'lucide-react';
+import { GithubIcon as Github } from './components/GithubIcon';
+import { AuthGate } from './components/AuthGate';
 import { ContextPanel } from './components/ContextPanel';
 import { NoteEditor } from './components/NoteEditor';
 import { ChapterExplanation } from './components/ChapterExplanation';
@@ -25,12 +32,17 @@ import { HighlightableVerse } from './components/HighlightableVerse';
 import { TextAudioPlayer } from './components/TextAudioPlayer';
 import { MoodSelector } from './components/MoodSelector';
 import { SavedContent } from './components/SavedContent';
+import { NotesCrudManager } from './components/NotesCrudManager';
+import { UserAccountModal } from './components/UserAccountModal';
 import { StudyMode } from './components/StudyMode';
 import { ShareableImage } from './components/ShareableImage';
 import { ReadingGoalSelector } from './components/ReadingGoalSelector';
 import { TheologyTutor } from './components/TheologyTutor';
 import { BiographyView } from './components/BiographyView';
 import { AuthButton } from './components/AuthButton';
+import { BiblicalGraphicsDashboard } from './components/BiblicalGraphicsDashboard';
+import { AITheologyStudio } from './components/AITheologyStudio';
+import { ReadingStreakTracker } from './components/ReadingStreakTracker';
 import { geminiService } from './services/geminiService';
 import { userService } from './services/userService';
 import { localStorageService } from './services/localStorageService';
@@ -51,7 +63,7 @@ function App() {
   const [data, setData] = useState<ChapterResponse | null>(null);
   const [loadingState, setLoadingState] = useState<LoadingState>(LoadingState.IDLE);
   const [isContextOpen, setContextOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'home' | 'reader' | 'plan' | 'search' | 'devotional' | 'mood' | 'saved' | 'study' | 'biography'>('home');
+  const [viewMode, setViewMode] = useState<'home' | 'reader' | 'plan' | 'search' | 'devotional' | 'mood' | 'saved' | 'study' | 'biography' | 'graphics' | 'ai-studio'>('home');
   const [devotional, setDevotional] = useState<DailyDevotional | null>(null);
   const [loadingDevotional, setLoadingDevotional] = useState(false);
   const [moodResults, setMoodResults] = useState<MoodResult[]>([]);
@@ -71,6 +83,11 @@ function App() {
   const [userStats, setUserStats] = useState<UserStatsModel | null>(null);
   const [bibleBrowserView, setBibleBrowserView] = useState<'books' | 'chapters'>('books');
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [readChapters, setReadChapters] = useState<Set<string>>(new Set());
+  const [currentUser, setCurrentUser] = useState<any>(auth.currentUser);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   // Instancia del gestor de audio orientado a objetos
   const audioSyncManager = useMemo(() => {
@@ -115,17 +132,59 @@ function App() {
     
     // Autenticación y persistencia con servicio de usuario POO
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setIsAuthLoading(false);
       if (user) {
-        const stats = await userService.getUserStats(user.uid);
-        if (stats) setUserStats(stats);
-        else setUserStats(UserStatsModel.createDefault());
+        try {
+          const stats = await userService.getUserStats(user.uid);
+          if (stats) setUserStats(stats);
+          else setUserStats(UserStatsModel.createDefault());
+
+          // Cargar historial de capítulos leídos desde Cloud Firestore
+          const progress = await userService.getReadingProgress(user.uid);
+          if (progress && progress.length > 0) {
+            setReadChapters(new Set(progress.map(p => `${p.book}-${p.chapter}`)));
+          }
+        } catch (e) {
+          console.warn("Could not retrieve user stats from Firestore, falling back to local storage:", e);
+          setUserStats(localStorageService.loadUserStats());
+        }
       } else {
         setUserStats(localStorageService.loadUserStats());
+        setReadChapters(new Set());
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  const handleToggleChapterCompleted = async () => {
+    if (!currentBook) return;
+    const key = `${currentBook}-${currentChapter}`;
+    const isCompleted = readChapters.has(key);
+    const nextSet = new Set(readChapters);
+
+    if (isCompleted) {
+      nextSet.delete(key);
+      setReadChapters(nextSet);
+      if (auth.currentUser) {
+        await userService.removeReadingProgress(auth.currentUser.uid, currentBook, currentChapter).catch(console.error);
+      }
+    } else {
+      nextSet.add(key);
+      setReadChapters(nextSet);
+      if (auth.currentUser) {
+        await userService.saveReadingProgress(auth.currentUser.uid, currentBook, currentChapter).catch(console.error);
+        if (userStats) {
+          const updated = new UserStatsModel(userStats);
+          updated.addXP(25);
+          updated.registerActiveDay();
+          setUserStats(updated);
+          await userService.saveUserStats(auth.currentUser.uid, updated).catch(console.error);
+        }
+      }
+    }
+  };
 
   const fetchChapter = async (book: string, chapter: number) => {
     setLoadingState(LoadingState.LOADING);
@@ -179,7 +238,11 @@ function App() {
     setContextOpen(false);
   };
 
-  const handleNavigate = (mode: 'reader' | 'plan' | 'devotional' | 'mood' | 'saved' | 'study' | 'biography') => {
+  const handleNavigate = (mode: 'reader' | 'plan' | 'devotional' | 'mood' | 'saved' | 'study' | 'biography' | 'graphics' | 'ai-studio' | 'account') => {
+    if (mode === 'account') {
+      setIsAccountModalOpen(true);
+      return;
+    }
     if (mode === 'reader') { 
       setViewMode('reader');
       if (!data) setBibleBrowserView('books');
@@ -190,6 +253,8 @@ function App() {
     else if (mode === 'saved') setViewMode('saved');
     else if (mode === 'study') setViewMode('study');
     else if (mode === 'biography') setViewMode('biography');
+    else if (mode === 'graphics') setViewMode('graphics');
+    else if (mode === 'ai-studio') setViewMode('ai-studio');
   };
 
   const loadDevotional = async () => {
@@ -242,6 +307,32 @@ function App() {
   const hasPrev = currentChapter > 1 || bookIndex > 0;
   const hasNext = bookIndex !== -1 && (currentChapter < BIBLE_BOOKS[bookIndex].chapters || bookIndex < BIBLE_BOOKS.length - 1);
 
+  // Pantalla de carga mientras se verifica el estado de autenticación
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 text-center">
+        <motion.div 
+          animate={{ scale: [1, 1.08, 1] }} 
+          transition={{ repeat: Infinity, duration: 2 }}
+          className="w-16 h-20 bg-bible-leather rounded-xl mx-auto mb-4 flex flex-col items-center justify-center shadow-xl border-r-4 border-bible-gold"
+        >
+          <BookOpen size={30} className="text-bible-gold mb-1" />
+          <span className="text-[7px] text-bible-gold font-bold tracking-widest uppercase">ABBA</span>
+        </motion.div>
+        <h2 className="text-2xl font-display font-bold text-bible-ink tracking-tight uppercase">ABBA</h2>
+        <div className="flex items-center gap-2 mt-3 text-stone-400 text-xs font-medium">
+          <Loader2 size={16} className="animate-spin text-amber-600" />
+          <span>Verificando credenciales de acceso...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Si el usuario no ha iniciado sesión, mostrar la pantalla de Login y Registro antes de entrar al home
+  if (!currentUser) {
+    return <AuthGate onSuccess={() => setViewMode('home')} />;
+  }
+
   return (
     <div className="flex h-screen bg-stone-50 overflow-hidden font-sans selection:bg-bible-gold/30 text-bible-ink">
       <div className="flex-1 flex flex-col h-full overflow-hidden relative">
@@ -254,10 +345,14 @@ function App() {
               </button>
             )}
             {viewMode === 'home' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 rounded-2xl border border-white/40">
+              <button 
+                onClick={() => setIsStreakModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-white/60 hover:bg-white rounded-2xl border border-white/60 shadow-xs hover:shadow-sm transition-all active:scale-95 cursor-pointer"
+                title="Abrir Calendario Circular de Racha D3"
+              >
                 <Flame size={18} className="text-orange-500 fill-orange-500 animate-pulse" />
                 <span className="text-xs font-extra-bold text-bible-ink whitespace-nowrap">{userStats?.streak || 0} DÍAS</span>
-              </div>
+              </button>
             )}
           </div>
           
@@ -276,9 +371,25 @@ function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <AuthButton />
+            <AuthButton onOpenAccountModal={() => setIsAccountModalOpen(true)} />
             {viewMode === 'reader' && data && (
                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setViewMode('ai-studio')} 
+                    className="p-2.5 rounded-2xl bg-white/50 text-emerald-700 hover:bg-emerald-50 transition-all shadow-sm active:scale-95 flex items-center gap-1.5" 
+                    title="Exégesis IA de este Capítulo"
+                  >
+                    <Sparkles size={18} className="text-emerald-600" />
+                    <span className="hidden md:inline text-xs font-bold">Exégesis IA</span>
+                  </button>
+                  <button 
+                    onClick={() => setViewMode('graphics')} 
+                    className="p-2.5 rounded-2xl bg-white/50 text-amber-700 hover:bg-amber-50 transition-all shadow-sm active:scale-95 flex items-center gap-1.5" 
+                    title="Gráficos y Cartografía"
+                  >
+                    <BarChart3 size={18} className="text-amber-500" />
+                    <span className="hidden md:inline text-xs font-bold">Gráficos</span>
+                  </button>
                   <button 
                     onClick={() => setContextOpen(!isContextOpen)} 
                     className={`p-2.5 rounded-2xl transition-all shadow-sm active:scale-95 ${isContextOpen ? 'bg-bible-gold text-white' : 'bg-white/50 text-stone-500 hover:text-bible-gold'}`} 
@@ -383,11 +494,13 @@ function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                      {[
                         { mode: 'reader', label: 'Explorar', sub: 'TEXTOS SAGRADOS', icon: <BookOpen className="text-amber-600" />, color: 'hover:bg-amber-100/50' },
-                        { mode: 'devotional', label: 'Devocional', sub: 'PAN DE VIDA', icon: <Sparkles className="text-emerald-600" />, color: 'hover:bg-emerald-100/50' },
+                        { mode: 'saved', label: 'Bitácora CRUD', sub: 'NOTAS & FIRESTORE', icon: <FileText className="text-purple-600" />, color: 'hover:bg-purple-100/50' },
+                        { mode: 'graphics', label: 'Gráficos', sub: 'CANON & PACTOS', icon: <BarChart3 className="text-amber-500" />, color: 'hover:bg-amber-100/50' },
+                        { mode: 'ai-studio', label: 'Teología IA', sub: 'EXÉGESIS & IDIOMAS', icon: <Sparkles className="text-emerald-600" />, color: 'hover:bg-emerald-100/50' },
+                        { mode: 'devotional', label: 'Devocional', sub: 'PAN DE VIDA', icon: <Flame className="text-rose-600" />, color: 'hover:bg-rose-100/50' },
                         { mode: 'plan', label: 'Rutas', sub: 'PLAN DE LECTURA', icon: <Calendar className="text-blue-600" />, color: 'hover:bg-blue-100/50' },
                         { mode: 'study', label: 'Academia', sub: 'CURSOS Y QUICES', icon: <GraduationCap className="text-purple-600" />, color: 'hover:bg-purple-100/50' },
-                        { mode: 'mood', label: 'Guía', sub: 'SEGÚN TUS EMOCIONES', icon: <Heart className="text-rose-600" />, color: 'hover:bg-rose-100/50' },
-                        { mode: 'saved', label: 'Tesoro', sub: 'MIS MARCAS Y NOTAS', icon: <Bookmark className="text-stone-600" />, color: 'hover:bg-stone-200/50' },
+                        { mode: 'mood', label: 'Guía', sub: 'SEGÚN TUS EMOCIONES', icon: <Heart className="text-pink-600" />, color: 'hover:bg-pink-100/50' },
                         { mode: 'biography', label: 'Héroes', sub: 'BIOGRAFÍAS BÍBLICAS', icon: <User className="text-orange-600" />, color: 'hover:bg-orange-100/50' },
                      ].map((item: any, idx) => (
                         <motion.button 
@@ -653,7 +766,49 @@ function App() {
                       })}
                     </div>
 
-                    <div className="mt-40 pt-20 border-t border-stone-200/50">
+                    {/* Chapter Completion Bar for Firestore tracking */}
+                    <motion.div 
+                      initial={{ opacity: 0, y: 15 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      className="my-14 max-w-2xl mx-auto p-6 bg-gradient-to-r from-amber-500/10 via-stone-50 to-amber-500/10 border border-amber-500/30 rounded-3xl shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${
+                          readChapters.has(`${currentBook}-${currentChapter}`)
+                            ? 'bg-emerald-500 text-white shadow-md'
+                            : 'bg-stone-200 text-stone-500'
+                        }`}>
+                          <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-stone-900 font-serif">
+                            {readChapters.has(`${currentBook}-${currentChapter}`)
+                              ? 'Capítulo Guardado en tu Avance'
+                              : '¿Concluiste la lectura de este capítulo?'}
+                          </h4>
+                          <p className="text-xs text-stone-600">
+                            {readChapters.has(`${currentBook}-${currentChapter}`)
+                              ? 'Registrado y sincronizado en tu cuenta en Cloud Firestore'
+                              : 'Almacena tu avance en la base de datos y gana +25 XP'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleToggleChapterCompleted}
+                          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow ${
+                            readChapters.has(`${currentBook}-${currentChapter}`)
+                              ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              : 'bg-stone-900 hover:bg-stone-800 text-white'
+                          }`}
+                        >
+                          {readChapters.has(`${currentBook}-${currentChapter}`) ? 'Completado ✓' : 'Marcar como Leído (+25 XP)'}
+                        </button>
+                      </div>
+                    </motion.div>
+
+                    <div className="mt-20 pt-10 border-t border-stone-200/50">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-20">
                          {hasPrev && (
                            <button onClick={handlePrevChapter} className="group flex items-center gap-5 p-6 bg-white shadow-soft rounded-[2.5rem] hover:shadow-glass hover:-translate-y-1 transition-all border border-transparent hover:border-bible-gold/20">
@@ -729,8 +884,44 @@ function App() {
                </motion.div>
             )}
 
-            {viewMode === 'saved' && ( <motion.div key="saved" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><SavedContent onNavigateToVerse={() => {}} onDeleteItem={() => {}} /></motion.div> )}
+            {viewMode === 'saved' && ( 
+              <motion.div key="saved" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                <NotesCrudManager 
+                  onNavigateToVerse={(book, chapter) => {
+                    setCurrentBook(book);
+                    setCurrentChapter(chapter);
+                    fetchChapter(book, chapter);
+                    setViewMode('reader');
+                  }} 
+                  onOpenAccount={() => setIsAccountModalOpen(true)}
+                />
+              </motion.div> 
+            )}
             {viewMode === 'study' && ( <motion.div key="study" initial={{ opacity: 0 }} animate={{ opacity: 1 }}><StudyMode /></motion.div> )}
+
+            {viewMode === 'graphics' && (
+              <motion.div key="graphics" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                <BiblicalGraphicsDashboard 
+                  userStats={userStats} 
+                  onNavigateToBible={(book, chapter) => {
+                    setCurrentBook(book);
+                    setCurrentChapter(chapter);
+                    fetchChapter(book, chapter);
+                    setViewMode('reader');
+                  }} 
+                  onBack={handleGoHome} 
+                />
+              </motion.div>
+            )}
+
+            {viewMode === 'ai-studio' && (
+              <motion.div key="ai-studio" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}>
+                <AITheologyStudio 
+                  initialTopic={currentBook ? `${currentBook} ${currentChapter}` : 'Juan 1:1'} 
+                  onBack={handleGoHome} 
+                />
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
       </div>
@@ -756,6 +947,57 @@ function App() {
           </motion.div>
         </AnimatePresence>
       )}
+
+      {isStreakModalOpen && (
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-bible-ink/60 backdrop-blur-md z-[120] flex items-center justify-center p-4"
+            onClick={() => setIsStreakModalOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 20 }}
+              className="w-full max-w-4xl max-h-[90vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <ReadingStreakTracker
+                userStats={userStats}
+                onClose={() => setIsStreakModalOpen(false)}
+                onNavigateToReading={() => {
+                  setIsStreakModalOpen(false);
+                  setViewMode('reader');
+                  if (!currentBook) {
+                    setCurrentBook('Juan');
+                    setCurrentChapter(1);
+                    fetchChapter('Juan', 1);
+                  }
+                }}
+                onUpdateStats={(newStats) => {
+                  setUserStats(newStats);
+                  if (auth.currentUser) {
+                    userService.saveUserStats(auth.currentUser.uid, newStats).catch(console.error);
+                  } else {
+                    localStorageService.saveUserStats(newStats);
+                  }
+                }}
+              />
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
+      )}
+
+      {/* Modal de Cuenta de Usuario, Avance & GitHub */}
+      <UserAccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        userStats={userStats}
+        onStatsUpdated={(newStats) => setUserStats(newStats)}
+        onOpenNotesCrud={() => setViewMode('saved')}
+      />
     </div>
   );
 }

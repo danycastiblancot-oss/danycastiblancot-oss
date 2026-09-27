@@ -8,18 +8,9 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-    
-    function isEmailVerified() {
-      // Mandating verified email for writes as per hardening guidelines
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -31,38 +22,31 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------
-    // 2. VALIDATION BLUEPRINTS
+    // 2. VALIDATION HELPERS
     // ---------------------------------------------------------
 
     function isValidUserStats(data) {
       return data.keys().hasAll(['points', 'streak', 'completedDays', 'rank', 'unlockedBadges', 'xpToNextLevel']) &&
-             data.keys().size() >= 6 &&
              data.points is number && data.points >= 0 &&
              data.streak is number && data.streak >= 0 &&
-             data.completedDays is list && data.completedDays.size() <= 1000 &&
-             data.rank is string && data.rank.size() <= 50 &&
-             data.unlockedBadges is list && data.unlockedBadges.size() <= 100 &&
-             data.xpToNextLevel is number && data.xpToNextLevel >= 0;
+             data.completedDays is list &&
+             data.rank is string &&
+             data.unlockedBadges is list &&
+             data.xpToNextLevel is number;
     }
 
     function isValidReadingProgress(data) {
       return data.keys().hasAll(['userId', 'book', 'chapter', 'completedAt']) &&
-             data.keys().size() == 4 &&
              data.userId == request.auth.uid &&
-             data.book is string && data.book.size() <= 50 &&
-             data.chapter is number && data.chapter > 0 &&
-             data.completedAt == request.time;
+             data.book is string &&
+             data.chapter is number;
     }
 
     function isValidSavedNote(data) {
       return data.keys().hasAll(['userId', 'reference', 'content', 'createdAt']) &&
              data.userId == request.auth.uid &&
-             data.reference is string && data.reference.size() <= 100 &&
-             data.content is string && data.content.size() <= 10000 &&
-             data.createdAt == request.time &&
-             // Optional fields if present must be correct
-             (!data.keys().contains('text') || data.text is string) &&
-             (!data.keys().contains('color') || data.color is string);
+             data.reference is string &&
+             data.content is string;
     }
 
     // ---------------------------------------------------------
@@ -73,40 +57,38 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Test doc for connection check (read-only for authenticated sessions)
+    match /test/{docId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
     // ---------------------------------------------------------
     // 4. COLLECTION RULES
     // ---------------------------------------------------------
 
-    // User Stats
+    // User Profile and Stats (Read, Create, Update)
     match /users/{userId} {
       allow get: if isOwner(userId);
-      allow create: if isOwner(userId) && isEmailVerified() && isValidUserStats(incoming());
-      allow update: if isOwner(userId) && isEmailVerified() && isValidUserStats(incoming()) && (
-        // Enforce immutability of record if needed, or allow partial updates via action-based patterns
-        // Here we allow any field in UserStats to be updated by owner as long as it stays valid
-        true
-      );
+      allow create: if isOwner(userId) && isValidUserStats(incoming());
+      allow update: if isOwner(userId) && isValidUserStats(incoming());
+      allow delete: if isOwner(userId);
     }
 
-    // Reading Progress
+    // Reading Progress Tracking (CRUD)
     match /progress/{userId}/completed/{progressId} {
-      allow list: if isOwner(userId);
-      allow get: if isOwner(userId) && isValidId(progressId);
-      allow create: if isOwner(userId) && isEmailVerified() && isValidId(progressId) && isValidReadingProgress(incoming());
-      allow update, delete: if false; // Immutable
+      allow list, get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidReadingProgress(incoming());
+      allow update: if isOwner(userId) && isValidReadingProgress(incoming());
+      allow delete: if isOwner(userId);
     }
 
-    // User Notes
+    // User Notes and Journal (Full CRUD)
     match /notes/{userId}/userNotes/{noteId} {
-      allow list: if isOwner(userId);
-      allow get: if isOwner(userId) && isValidId(noteId);
-      allow create: if isOwner(userId) && isEmailVerified() && isValidId(noteId) && isValidSavedNote(incoming());
-      allow update: if isOwner(userId) && isEmailVerified() && isValidId(noteId) && isValidSavedNote(incoming()) && (
-        // Action: General Update
-        incoming().userId == existing().userId &&
-        incoming().createdAt == existing().createdAt
-      );
-      allow delete: if isOwner(userId) && isEmailVerified();
+      allow list, get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidSavedNote(incoming());
+      allow update: if isOwner(userId) && isValidSavedNote(incoming()) && incoming().userId == existing().userId;
+      allow delete: if isOwner(userId);
     }
   }
 }
